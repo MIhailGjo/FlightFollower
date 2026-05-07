@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="page">
+        <section class="tracker">
+            <h1>Flight Follower</h1>
+
+            <form id="flightForm" class="search-form">
+                <label for="searchflight">Search Flight Number</label>
+                <div class="input-row">
+                    <input type="text" id="searchflight" name="searchflight" placeholder="Example: AA124" required>
+                    <button type="submit">Search</button>
+                </div>
+                <p id="message" class="message"></p>
+            </form>
+
+            <h2>Saved Flights</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Flight #</th>
+                            <th>Airline</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Status</th>
+                            <th>Gate</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="favoriteTableBody">
+                        <tr class="empty-row">
+                            <td colspan="7">No saved flights yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>Search Results</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Flight #</th>
+                            <th>Airline</th>
+                            <th>From</th>
+                            <th>To</th>
+                            <th>Status</th>
+                            <th>Gate</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="flightTableBody">
+                        <tr class="empty-row">
+                            <td colspan="7">No search results yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const form = document.querySelector("#flightForm");
+        const flightInput = document.querySelector("#searchflight");
+        const favoriteTableBody = document.querySelector("#favoriteTableBody");
+        const flightTableBody = document.querySelector("#flightTableBody");
+        const message = document.querySelector("#message");
+        const favorites = [];
+        const searchResults = [];
+        const fields = ["flightNumber", "airline", "from", "to", "status", "gate"];
+
+        function createFlightRow(flight, actionText, actionClass, index) {
+            const row = document.createElement("tr");
+
+            fields.forEach((field) => {
+                const cell = document.createElement("td");
+                cell.textContent = flight[field] || "";
+                row.appendChild(cell);
+            });
+
+            const actionCell = document.createElement("td");
+            const actionButton = document.createElement("button");
+            actionButton.type = "button";
+            actionButton.className = actionClass;
+            actionButton.dataset.index = index;
+            actionButton.textContent = actionText;
+            actionCell.appendChild(actionButton);
+            row.appendChild(actionCell);
+
+            return row;
+        }
+
+        function renderFavorites() {
+            favoriteTableBody.innerHTML = "";
+
+            if (favorites.length === 0) {
+                favoriteTableBody.innerHTML = '<tr class="empty-row"><td colspan="7">No saved flights yet.</td></tr>';
+                return;
+            }
+
+            favorites.forEach((flight, index) => {
+                favoriteTableBody.appendChild(createFlightRow(flight, "Remove", "small-button saved-button remove-favorite", index));
+            });
+        }
+
+        function renderSearchResults() {
+            flightTableBody.innerHTML = "";
+
+            if (searchResults.length === 0) {
+                flightTableBody.innerHTML = '<tr class="empty-row"><td colspan="7">No search results yet.</td></tr>';
+                return;
+            }
+
+            searchResults.forEach((flight, index) => {
+                const alreadySaved = favorites.some((favorite) => favorite.flightNumber === flight.flightNumber);
+                const text = alreadySaved ? "Saved" : "Save";
+                const className = alreadySaved ? "small-button saved-button" : "small-button save-favorite";
+
+                flightTableBody.appendChild(createFlightRow(flight, text, className, index));
+            });
+        }
+
+        function renderTables() {
+            renderFavorites();
+            renderSearchResults();
+        }
+
+        async function loadFavorites() {
+            try {
+                const response = await fetch("/api/favorites");
+                const data = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = data.error || "Could not load favorite flights.";
+                    return;
+                }
+
+                favorites.length = 0;
+
+                data.forEach((favorite) => {
+                    favorites.push({
+                        flightNumber: favorite.flightNumber,
+                        airline: favorite.airline,
+                        from: favorite.from,
+                        to: favorite.to,
+                        status: favorite.status,
+                        gate: favorite.gate,
+                        favoriteId: favorite._id
+                    });
+                });
+
+                renderTables();
+            } catch (error) {
+                message.textContent = "Could not connect to MongoDB favorites.";
+            }
+        }
+
+        async function saveFavorite(index) {
+            const flight = searchResults[index];
+            message.textContent = "Saving favorite...";
+
+            try {
+                const response = await fetch("/api/favorites", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(flight)
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = data.error || "Could not save favorite.";
+                    return;
+                }
+
+                favorites.unshift({
+                    flightNumber: data.flightNumber,
+                    airline: data.airline,
+                    from: data.from,
+                    to: data.to,
+                    status: data.status,
+                    gate: data.gate,
+                    favoriteId: data._id
+                });
+
+                message.textContent = "Favorite saved.";
+                renderTables();
+            } catch (error) {
+                message.textContent = "Could not connect to the server.";
+            }
+        }
+
+        async function removeFavorite(index) {
+            const flight = favorites[index];
+
+            if (!flight.favoriteId) {
+                return;
+            }
+
+            message.textContent = "Removing favorite...";
+
+            try {
+                const response = await fetch(`/api/favorites/${flight.favoriteId}`, {
+                    method: "DELETE"
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = data.error || "Could not remove favorite.";
+                    return;
+                }
+
+                favorites.splice(index, 1);
+                message.textContent = "Favorite removed.";
+                renderTables();
+            } catch (error) {
+                message.textContent = "Could not connect to the server.";
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const flightNumber = flightInput.value.trim().toUpperCase();
+
+            if (flightNumber === "") {
+                return;
+            }
+
+            message.textContent = "Searching...";
+
+            try {
+                const response = await fetch(`/api/flights/${encodeURIComponent(flightNumber)}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    message.textContent = data.error || "Could not search for that flight.";
+                    return;
+                }
+
+                if (data.length === 0) {
+                    message.textContent = "No flights found.";
+                    return;
+                }
+
+                searchResults.length = 0;
+                searchResults.push(...data);
+                message.textContent = "";
+            } catch (error) {
+                message.textContent = "Could not connect to the server.";
+                return;
+            }
+
+            flightInput.value = "";
+            flightInput.focus();
+            renderTables();
+        });
+
+        flightTableBody.addEventListener("click", (event) => {
+            if (!event.target.matches(".save-favorite")) {
+                return;
+            }
+
+            saveFavorite(Number(event.target.dataset.index));
+        });
+
+        favoriteTableBody.addEventListener("click", (event) => {
+            if (!event.target.matches(".remove-favorite")) {
+                return;
+            }
+
+            removeFavorite(Number(event.target.dataset.index));
+        });
+
+        loadFavorites();
+    </script>
+</body>
+</html>
