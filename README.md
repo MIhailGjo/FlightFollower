@@ -12,6 +12,6 @@ APIs: Aviationstack API (https://aviationstack.com/)
 
 Contact Email: mgjoni@terpmail.umd.edu
 
-Deployed App Link: https://your-render-link.onrender.com
+Deployed App Link: [https://your-render-link.onrender.com](https://flightfollower.onrender.com/)
 
 AI Use: 1. ChatGPT
